@@ -1,5 +1,5 @@
 === FILE: pubspec.yaml ===
-name: translator_app
+name: mado_translation
 description: Offline Translator (Arabic ↔ English ↔ German) + OCR
 publish_to: "none"
 version: 1.0.0+1
