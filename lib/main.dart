@@ -1,0 +1,252 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:google_mlkit_translation/google_mlkit_translation.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image_picker/image_picker.dart';
+
+void main() {
+  runApp(const TranslatorApp());
+}
+
+class TranslatorApp extends StatelessWidget {
+  const TranslatorApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      locale: const Locale('ar'),
+      title: 'مترجم أوفلاين',
+      theme: ThemeData(
+        fontFamily: 'Roboto',
+        useMaterial3: true,
+      ),
+      home: const TranslatorScreen(),
+    );
+  }
+}
+
+class TranslatorScreen extends StatefulWidget {
+  const TranslatorScreen({super.key});
+
+  @override
+  State<TranslatorScreen> createState() => _TranslatorScreenState();
+}
+
+class _TranslatorScreenState extends State<TranslatorScreen> {
+  final TextEditingController _inputCtrl = TextEditingController();
+  String _output = "";
+
+  // ML Kit OCR
+  final textRecognizer = TextRecognizer();
+
+  // ML Kit Translation
+  late OnDeviceTranslator translator;
+  TranslateLanguage sourceLang = TranslateLanguage.arabic;
+  TranslateLanguage targetLang = TranslateLanguage.english;
+
+  @override
+  void initState() {
+    super.initState();
+    translator = OnDeviceTranslator(
+      sourceLanguage: sourceLang,
+      targetLanguage: targetLang,
+    );
+  }
+
+  @override
+  void dispose() {
+    _inputCtrl.dispose();
+    textRecognizer.close();
+    translator.close();
+    super.dispose();
+  }
+
+  Future<void> _translateText() async {
+    final text = _inputCtrl.text.trim();
+    if (text.isEmpty) return;
+
+    final result = await translator.translateText(text);
+    setState(() {
+      _output = result;
+    });
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+
+    final inputImage = InputImage.fromFile(File(picked.path));
+    final recognized = await textRecognizer.processImage(inputImage);
+
+    setState(() {
+      _inputCtrl.text = recognized.text;
+    });
+  }
+
+  Future<void> _captureImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.camera);
+    if (picked == null) return;
+
+    final inputImage = InputImage.fromFile(File(picked.path));
+    final recognized = await textRecognizer.processImage(inputImage);
+
+    setState(() {
+      _inputCtrl.text = recognized.text;
+    });
+  }
+
+  void _swapLanguages() {
+    setState(() {
+      final temp = sourceLang;
+      sourceLang = targetLang;
+      targetLang = temp;
+      translator = OnDeviceTranslator(
+        sourceLanguage: sourceLang,
+        targetLanguage: targetLang,
+      );
+      _output = "";
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("مترجم أوفلاين"),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.swap_horiz),
+              onPressed: _swapLanguages,
+              tooltip: "تبديل اللغات",
+            )
+          ],
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButton<TranslateLanguage>(
+                      value: sourceLang,
+                      items: const [
+                        DropdownMenuItem(
+                          value: TranslateLanguage.arabic,
+                          child: Text("العربية"),
+                        ),
+                        DropdownMenuItem(
+                          value: TranslateLanguage.english,
+                          child: Text("English"),
+                        ),
+                        DropdownMenuItem(
+                          value: TranslateLanguage.german,
+                          child: Text("Deutsch"),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            sourceLang = val;
+                            translator = OnDeviceTranslator(
+                              sourceLanguage: sourceLang,
+                              targetLanguage: targetLang,
+                            );
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DropdownButton<TranslateLanguage>(
+                      value: targetLang,
+                      items: const [
+                        DropdownMenuItem(
+                          value: TranslateLanguage.arabic,
+                          child: Text("العربية"),
+                        ),
+                        DropdownMenuItem(
+                          value: TranslateLanguage.english,
+                          child: Text("English"),
+                        ),
+                        DropdownMenuItem(
+                          value: TranslateLanguage.german,
+                          child: Text("Deutsch"),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            targetLang = val;
+                            translator = OnDeviceTranslator(
+                              sourceLanguage: sourceLang,
+                              targetLanguage: targetLang,
+                            );
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _inputCtrl,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: "النص",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _captureImage,
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text("كاميرا"),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _pickImage,
+                    icon: const Icon(Icons.image),
+                    label: const Text("معرض"),
+                  ),
+                  const Spacer(),
+                  ElevatedButton.icon(
+                    onPressed: _translateText,
+                    icon: const Icon(Icons.translate),
+                    label: const Text("ترجمة"),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: SingleChildScrollView(
+                    child: Text(
+                      _output.isEmpty ? "— النتيجة تظهر هنا —" : _output,
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                  ),
+                ),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
