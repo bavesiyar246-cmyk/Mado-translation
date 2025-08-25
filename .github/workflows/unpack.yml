@@ -34,8 +34,15 @@ jobs:
       - name: Patch AndroidManifest.xml
         run: |
           awk '/=== FILE: android\/app\/src\/main\/AndroidManifest.xml/{flag=1;next}/=== FILE:/{flag=0}flag' project_files.txt > manifest_additions.xml
-          if [ -s manifest_additions.xml ]; then
-            sed -i '/<application/i\'"$(cat manifest_additions.xml)" android/app/src/main/AndroidManifest.xml
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if [ -s manifest_additions.xml ] && [ -f "$MANIFEST" ]; then
+            perms="$(cat manifest_additions.xml)"
+            # نبني ملف جديد: السطر الأول كما هو، بعدها الصلاحيات، ثم باقي الملف
+            { head -n 1 "$MANIFEST"; echo "$perms"; tail -n +2 "$MANIFEST"; } > tmp_manifest.xml
+            mv tmp_manifest.xml "$MANIFEST"
+            echo "Manifest patched with permissions."
+          else
+            echo "No manifest additions or manifest missing, skipping."
           fi
 
       - name: Flutter pub get
