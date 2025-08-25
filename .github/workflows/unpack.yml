@@ -1,0 +1,76 @@
+name: Unpack Flutter App
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - project_files.txt
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Create Flutter skeleton (if missing)
+        run: |
+          if [ ! -f "pubspec.yaml" ]; then
+            flutter create .
+          fi
+
+      - name: Extract files from project_files.txt
+        shell: bash
+        run: |
+          python - << 'PY'
+          import re, os
+          data = open('project_files.txt','r',encoding='utf-8').read()
+          def extract(name):
+              pat = rf"=== FILE: {re.escape(name)}(?: \\(.*?\\))? ===\\n(.+?)(?=\\n=== FILE: |\\Z)"
+              import re
+              m = re.search(pat, data, flags=re.S)
+              return m.group(1).strip() if m else None
+
+          files = {
+            'pubspec.yaml': extract('pubspec.yaml'),
+            'lib/main.dart': extract('lib/main.dart'),
+            'README.md': extract('README.md'),
+            'manifest_additions.xml': extract('android/app/src/main/AndroidManifest.xml')
+          }
+
+          os.makedirs('lib', exist_ok=True)
+
+          if files['pubspec.yaml']:
+              open('pubspec.yaml','w',encoding='utf-8').write(files['pubspec.yaml']+'\n')
+
+          if files['lib/main.dart']:
+              open('lib/main.dart','w',encoding='utf-8').write(files['lib/main.dart']+'\n')
+
+          if files['README.md']:
+              open('README.md','w',encoding='utf-8').write(files['README.md']+'\n')
+
+          add = files['manifest_additions.xml']
+          if add:
+              p = 'android/app/src/main/AndroidManifest.xml'
+              txt = open(p,'r',encoding='utf-8').read()
+              for line in add.splitlines():
+                  line=line.strip()
+                  if line.startswith('<uses-permission') and line not in txt:
+                      txt = txt.replace('<application', line + '\n    <application')
+              open(p,'w',encoding='utf-8').write(txt)
+          PY
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add -A
+          git commit -m "Unpacked project_files.txt into Flutter app" || echo "No changes"
+          git push
